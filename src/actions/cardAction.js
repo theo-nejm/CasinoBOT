@@ -12,7 +12,12 @@ module.exports = async msg => {
     const player = await getPlayerByDcId(msg.author.id);
 
     if(player.balance < amount) {
-        msg.reply('você não pode apostar um valor maior que o que você tem. Seu saldo é');
+        msg.reply(`você não pode apostar um valor maior que o que você tem. Seu saldo é $${player.balance},00`);
+        return;
+    }
+
+    if(amount < 0) {
+        msg.reply('você não pode apostar um valor negativo.');
         return;
     }
 
