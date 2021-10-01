@@ -7,29 +7,99 @@ const randomInt = require("../utils/randomInt");
 
 
 module.exports = async msg => {
-    const amount = Number(msg.content.replace(`${process.env.PREFIX}card`, '').trim());
+    const params = msg.content.replace(`${process.env.PREFIX}card`, '').split(' ');
+    const amount = Number(params[1]);
+
+    if(msg.mentions.users.size === 0) {
+        const player = await getPlayerByDcId(msg.author.id);
+
+        if(player.balance < amount) {
+            msg.reply(`você não pode apostar um valor maior que o que você tem. Seu saldo é $${player.balance},00`);
+            return;
+        }
     
-    const player = await getPlayerByDcId(msg.author.id);
+        if(amount < 0) {
+            msg.reply('você não pode apostar um valor negativo.');
+            return;
+        }
+    
+        const game = {
+            isRunning: true,
+            round: 0,
+            total: 0,
+            botResult: randomInt(10, 16) + randomInt(0, 12),
+            amount
+        }
+    
+        chooseCard(msg, game);
+    } else {
+        const player1 = await getPlayerByDcId(msg.author.id);
 
-    if(player.balance < amount) {
-        msg.reply(`você não pode apostar um valor maior que o que você tem. Seu saldo é $${player.balance},00`);
-        return;
+        const player2 = await getPlayerByDcId(msg.mentions.users.first().id);
+
+        if(!player2) {
+            msg.reply('a pessoa que você desafiou não está no jogo ainda. Fala pra ela entrar! $entrar');
+            return;
+        }
+
+        if(player1.balance < amount) {
+            msg.reply(`você não pode apostar um valor maior que o que você tem. Seu saldo é: $${player1.balance},00`);
+            return;
+        } 
+        
+        if (player2.balance < amount) {
+            msg.reply(`você não pode apostar um valor maior que o saldo do seu oponente. O saldo dele é: $${player2.balance},00`);
+            return;
+        }
+
+        const embed = new MessageEmbed()
+            .setColor([35, 23, 45])
+            .setTitle('Vai aceitar o desafio?')
+        
+        msg.channel.send(`<@${player2.id}>, o ${player1.name} te desafiou para um blackjack. [Você tem 30s para aceitar]`)
+            .then(embedMsg => {
+                const possibleReactions = ['✅', '❌']
+
+                possibleReactions.forEach((reaction, user) => embedMsg.react(reaction));
+
+                const filter = (reaction, user) => {
+                    return possibleReactions.includes(reaction.emoji.name) && user.id === player2.id;
+                }
+
+                embedMsg.awaitReactions(filter, { max: 1, time: 30000, errors: ['time'] })
+                    .then(reactions => {
+                        const reaction = reactions.first();
+                        
+                        const choosenOption = possibleReactions.indexOf(reaction.emoji.name);
+                        
+                        if(choosenOption === 0) {
+                            chooseCard(msg, game);
+                        } else {
+                            msg.channel.send(`<@${player1.id}>, ${player2.name} rejeitou seu desafio.`);
+                        }
+                    }).catch(e => {
+                        console.log(e);
+                        msg.channel.send(`Infelizmente, <@${player1.id}>, o tempo de aceitar/rejeitar o desafio expirou.`);
+                    })
+        });   
     }
 
-    if(amount < 0) {
-        msg.reply('você não pode apostar um valor negativo.');
-        return;
+    /* -> informações q chegam no mention
+    {
+      id: '559454945062158368',
+      system: null,
+      locale: null,
+      flags: [UserFlags],
+      username: 'F4',
+      bot: false,
+      discriminator: '3210',
+      avatar: '4bee16b84d06c5fad56d29fe323553ed',
+      lastMessageID: null,
+      lastMessageChannelID: null
     }
+    */
 
-    const game = {
-        isRunning: true,
-        round: 0,
-        total: 0,
-        botResult: randomInt(10, 16) + randomInt(0, 12),
-        amount
-    }
-
-    chooseCard(msg, game);
+    // msg instanceof Message (discord.js)
 }
 
 function chooseCard(msg, game) {
@@ -68,7 +138,16 @@ function chooseCard(msg, game) {
 
     const embed = new MessageEmbed()
         .setColor([35, 23, 45])
-        .setTitle(`${msg.author.username}, você recebeu um ${carta} de ${naipe}\nTotal = ${game.total}`);
+
+    if(game.round === 1) {
+        embed.setTitle(`${msg.author.username}, bem-vindo ao blackjack! Você está jogando contra um bot!`);
+        embed.addField('Você recebeu um:', `${carta} de ${naipe}!`, true);
+        embed.addField('Pontuação total:', game.total, true);
+    } else {
+        embed.addField('Você recebeu um:', `${carta} de ${naipe}!`, true);
+        embed.addField('Pontuação total:', game.total, true);
+    }
+        
         
     msg.channel.send(embed).then(embedMsg => {
         const possibleReactions = ['🃏', '❌']
