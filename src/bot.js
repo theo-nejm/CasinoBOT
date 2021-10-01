@@ -25,6 +25,7 @@ client.on('message', msg => {
 //                 id: '1',
 //                 name: 'a',
 //                 balance: 0,
+//                 lastRouletteWithdraw: null,
 //             })
 //         } catch (e) {
 //             console.log(e);

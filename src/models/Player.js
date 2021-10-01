@@ -14,6 +14,10 @@ const Player = db.define('player', {
   balance: {
     type: Sequelize.DOUBLE,
     allowNull: false,
+  },
+  lastRouletteWithdraw: {
+    type: Sequelize.DATE,
+    allowNull: true,
   }
 })
 

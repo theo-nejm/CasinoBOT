@@ -5,6 +5,7 @@ const dadoAction = require('./dadoAction');
 const entrarAction = require('./entrarAction');
 const parImparAction = require('./parImparAction');
 const profileAction = require('./profileAction');
+const roletaAction = require('./roletaAction');
 
 const prefix = process.env.PREFIX;
 
@@ -36,6 +37,12 @@ module.exports = async function messageAction(msg) {
             break;
         case `${prefix}perfil`:
             await profileAction(msg);
+            break;
+        case `${prefix}roleta`:
+            await roletaAction(msg);
+            break;
+        case `${prefix}duelomortal`:
+            await duelomortalAction(msg);
             break;
     }   
 }

@@ -26,15 +26,24 @@ module.exports = async msg => {
         const game = {
             isRunning: true,
             round: 0,
-            total: 0,
-            botResult: randomInt(10, 16) + randomInt(0, 12),
-            amount
+            isAgainstBot: true,
+            whoseTurn: 'player1',
+            player1: {
+                total: 0,
+                name: player.name,
+                id: player.id,
+            },
+            player2: {
+                total: randomInt(12, 16) + randomInt(0, 11),
+                name: 'CasinoBOT',
+                id: 1,
+            },
+            amount: amount || 0,
         }
     
         chooseCard(msg, game);
     } else {
         const player1 = await getPlayerByDcId(msg.author.id);
-
         const player2 = await getPlayerByDcId(msg.mentions.users.first().id);
 
         if(!player2) {
@@ -50,6 +59,26 @@ module.exports = async msg => {
         if (player2.balance < amount) {
             msg.reply(`você não pode apostar um valor maior que o saldo do seu oponente. O saldo dele é: $${player2.balance},00`);
             return;
+        }
+
+        const game = {
+            isRunning: true,
+            round: 0,
+            amount: amount || 0,
+            isAgainstBot: false,
+            whoseTurn: 'player1',
+            player1: {
+                total: 0,
+                id: player1.id,
+                name: player1.name,
+                isFinished: false,
+            },
+            player2: {
+                total: 0,
+                id: player2.id,
+                name: player2.name,
+                isFinished: false,
+            }
         }
 
         const embed = new MessageEmbed()
@@ -81,25 +110,8 @@ module.exports = async msg => {
                         console.log(e);
                         msg.channel.send(`Infelizmente, <@${player1.id}>, o tempo de aceitar/rejeitar o desafio expirou.`);
                     })
-        });   
+        });
     }
-
-    /* -> informações q chegam no mention
-    {
-      id: '559454945062158368',
-      system: null,
-      locale: null,
-      flags: [UserFlags],
-      username: 'F4',
-      bot: false,
-      discriminator: '3210',
-      avatar: '4bee16b84d06c5fad56d29fe323553ed',
-      lastMessageID: null,
-      lastMessageChannelID: null
-    }
-    */
-
-    // msg instanceof Message (discord.js)
 }
 
 function chooseCard(msg, game) {
@@ -128,34 +140,35 @@ function chooseCard(msg, game) {
     const carta = Object.keys(cards)[cardIndex];
     const cardValue = Object.values(cards)[cardIndex];
 
-    game.total += cardValue;
-    game.round += 1;
+    game[game.whoseTurn].total += cardValue;
 
-    if(game.total >= 21) {
-        finishGame(msg, game);
-        return;
-    }
+    game.round += 1;
 
     const embed = new MessageEmbed()
         .setColor([35, 23, 45])
 
     if(game.round === 1) {
-        embed.setTitle(`${msg.author.username}, bem-vindo ao blackjack! Você está jogando contra um bot!`);
+        embed.setTitle(`${msg.author.username}, bem-vindo ao blackjack! Você está jogando contra ${game.isAgainstBot ? 'um bot' : game.player2.name}!`);
         embed.addField('Você recebeu um:', `${carta} de ${naipe}!`, true);
-        embed.addField('Pontuação total:', game.total, true);
+        embed.addField('Pontuação total:', game.player1.total, true);
     } else {
-        embed.addField('Você recebeu um:', `${carta} de ${naipe}!`, true);
-        embed.addField('Pontuação total:', game.total, true);
+        embed.addField(`${game[game.whoseTurn].name} recebeu um:`, `${carta} de ${naipe}!`, true);
+        embed.addField('Pontuação total:', game[game.whoseTurn].total, true);
+
+        if(game[game.whoseTurn].total >= 21) {
+            finishGame(msg, game); 
+            msg.channel.send(embed);
+            return;
+        }
     }
         
-        
     msg.channel.send(embed).then(embedMsg => {
-        const possibleReactions = ['🃏', '❌']
+        const possibleReactions = ['🃏', '❌'];
 
-        possibleReactions.forEach((reaction, user) => embedMsg.react(reaction));
+        possibleReactions.forEach((reaction) => embedMsg.react(reaction));
 
         const filter = (reaction, user) => {
-            return possibleReactions.includes(reaction.emoji.name) && user.id === msg.author.id;
+            return possibleReactions.includes(reaction.emoji.name) && user.id === game[game.whoseTurn].id;
         }
 
         embedMsg.awaitReactions(filter, { max: 1, time: 15000, errors: ['time'] })
@@ -165,9 +178,25 @@ function chooseCard(msg, game) {
                 const choosenOption = possibleReactions.indexOf(reaction.emoji.name);
                 
                 if(choosenOption === 0) {
+                    if(!game.isAgainstBot) game.whoseTurn = game.whoseTurn === 'player1' ? 'player2' : 'player1';
+
+                    if(game[game.whoseTurn].isFinished) game.whoseTurn = game.whoseTurn === 'player1' ? 'player2' : 'player1';
                     chooseCard(msg, game);
                 } else {
-                    finishGame(msg, game);
+                    game[game.whoseTurn].isFinished = true;
+
+                    if(game.isAgainstBot && game.player1.isFinished) {
+                        finishGame(msg, game);
+                        return;
+                    }
+
+                    if(game.player1.isFinished && game.player2.isFinished) {
+                        finishGame(msg, game);
+                        return;
+                    } else {
+                        game.whoseTurn = game.whoseTurn === 'player1' ? 'player2' : 'player1';
+                        chooseCard(msg, game);
+                    }
                 }
             })
     })
@@ -178,31 +207,37 @@ async function finishGame(msg, game) {
 
     game.isRunning = false;
 
-    if(game.botResult > 21 && game.playerResult > 21 || game.botResult == game.total) {
+    if(game.player2.total > 21 && game.player1.total > 21 || game.player1.total == game.player2.total) {
         newEmbed.setColor([200, 70, 10]);
         newEmbed.setTitle('EMPATE!');
-    } else if(game.botResult > game.total && game.botResult <= 21 || game.total > 21) {
+    } else if((game.player2.total > game.player1.total && game.player2.total <= 21) || game.player1.total > 21) {
         if(await decreaseAmount(msg.author.id, game.amount)) {
+            !game.isAgainstBot && await increaseAmount(game.player2.id, game.amount);
+
             newEmbed.setColor([110, 35, 35]);
-            newEmbed.setTitle('O bot venceu!');
-            newEmbed.setFooter(`${msg.author.username}, você perdeu $${game.amount},00`);
+            newEmbed.setTitle(`${game.player2.name} venceu!`);
+            newEmbed.addField(`${game.player2.name}, você ganhou`, `$${game.amount},00`);
+            newEmbed.addField(`${game.player1.name}, você perdeu`, `$${game.amount},00`);
         } else {
             newEmbed.setColor([65, 23, 45]);
-            newEmbed.setTitle('Ocorreu um erro.')
+            newEmbed.setTitle('Ocorreu um erro.');
         }
     } else {
         if(await increaseAmount(msg.author.id, game.amount)) {
+            !game.isAgainstBot && await decreaseAmount(game.player2.id, game.amount);
+            
             newEmbed.setColor([35, 110, 35]);
-            newEmbed.setTitle(`${msg.author.username} venceu!`);
-            newEmbed.setFooter(`${msg.author.username}, você ganhou $${game.amount},00`);
+            newEmbed.setTitle(`${game.player1.name} venceu!`);
+            newEmbed.addField(`${game.player1.name}, você ganhou`, `$${game.amount},00`);
+            newEmbed.addField(`${game.player2.name}, você perdeu`, `$${game.amount},00`);
         } else {
             newEmbed.setColor([65, 23, 45]);
             newEmbed.setTitle('Ocorreu um erro.')
         }
     }
 
-    newEmbed.addField('Pontuação do bot: ', game.botResult);
-    newEmbed.addField(`Pontuação de ${msg.author.username}`, game.total);
+    newEmbed.addField(`Pontuação de ${game.player1.name}: `, game.player1.total, true);
+    newEmbed.addField(`Pontuação de ${game.player2.name}: `, game.player2.total, true);
 
     msg.reply(newEmbed);
 }
