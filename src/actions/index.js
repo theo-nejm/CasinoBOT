@@ -1,7 +1,9 @@
 const globalFilters = require('../filters/globalFilters');
 const playerExists = require('../services/playerExists');
+const ajudaAction = require('./ajudaAction');
 const cardAction = require('./cardAction');
 const dadoAction = require('./dadoAction');
+const duelomortalAction = require('./duelomortalAction');
 const entrarAction = require('./entrarAction');
 const parImparAction = require('./parImparAction');
 const profileAction = require('./profileAction');
@@ -14,7 +16,7 @@ module.exports = async function messageAction(msg) {
     
     if(await globalFilters(msg)) return;
 
-    if(!(msg.content.split(' ')[0] === `${prefix}entrar`) && !isPlayer) {
+    if(!(msg.content.split(' ')[0] === `${prefix}entrar` || msg.content.split(' ')[0] === `${prefix}ajuda`) && !isPlayer) {
         msg.reply(' você precisa estar no jogo para usar esse comando. Digite $entrar');
         return;
     }
@@ -43,6 +45,9 @@ module.exports = async function messageAction(msg) {
             break;
         case `${prefix}duelomortal`:
             await duelomortalAction(msg);
+            break;
+        case `${prefix}ajuda`:
+            await ajudaAction(msg);
             break;
     }   
 }
